@@ -1,0 +1,348 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Match The Card Online</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;height:100dvh;margin:0;overflow:hidden;overscroll-behavior:none;font-family:Arial,sans-serif;background:#0b1120;color:white}
+button,input,select{font:inherit}
+button{border:0;border-radius:8px;cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.4}
+.screen{height:100%;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+header{text-align:center;background:#111c31;padding:8px;flex-shrink:0}
+header h1{margin:0;color:#60a5fa;font-size:22px}
+header p{margin:3px;font-size:10px;color:#94a3b8}
+.lobby{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:16px;overflow:hidden}
+.lobby h2{text-align:center;margin:0}
+input,select{width:100%;min-height:43px;padding:10px;background:#1e293b;color:white;border:1px solid #334155;border-radius:8px}
+.primary{min-height:43px;background:#2563eb;color:white;font-weight:bold}
+.hint{text-align:center;font-size:12px;color:#94a3b8;line-height:1.4}
+.game{flex:1;min-height:0;display:flex;flex-direction:column;gap:5px;padding:5px;overflow:hidden}
+.info{flex-shrink:0;background:#172338;border-radius:9px;padding:6px}
+.roomline{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:5px;gap:4px}
+.roomline button{padding:5px 8px;background:#334155;color:white;font-size:10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center}
+.stat{background:#0b1120;border-radius:6px;padding:4px}
+.stat small{display:block;font-size:9px;color:#94a3b8}
+.stat strong{font-size:17px}
+#timer{color:#4ade80}
+#timer.danger{color:#f87171}
+.players{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px}
+.player{display:flex;align-items:center;justify-content:space-between;gap:4px;min-width:0;padding:5px 7px;border:2px solid transparent;border-radius:7px;background:#0b1120}
+.player.active{border-color:#60a5fa;background:#172554}
+.player span{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player strong{font-size:17px}
+#message{text-align:center;font-size:11px;margin:5px 0 0;min-height:13px;color:#cbd5e1}
+#board{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(var(--rows,6),minmax(0,1fr));gap:clamp(2px,1vw,5px);overflow:hidden}
+.card{width:100%;height:100%;min-width:0;min-height:0;padding:0;margin:0;border:1px solid #60a5fa;border-radius:5px;background:#1d4ed8;color:white;font-size:clamp(12px,4vw,29px);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.card.revealed{background:#f8fafc;color:#111827}
+.card.matched{background:#166534;border-color:#4ade80;color:white}
+.footer{display:flex;gap:5px;flex-shrink:0;padding:3px 5px max(4px,env(safe-area-inset-bottom))}
+.footer button{flex:1;min-width:0;min-height:34px;background:#25344d;color:white;font-size:11px}
+.hidden{display:none!important}
+@media(max-height:600px){header{padding:4px}header h1{font-size:17px}header p{display:none}.game{padding:3px;gap:3px}.info{padding:4px}.stat{padding:2px}.player{padding:3px 5px}#message{margin-top:3px}.footer{padding:2px}}
+</style>
+</head>
+<body>
+<div class="screen">
+<header><h1>🃏 MATCH THE CARD</h1><p>ONLINE MULTIPLAYER</p></header>
+
+<section class="lobby" id="lobby">
+<h2>Create or Join Room</h2>
+<input id="playerName" maxlength="20" placeholder="Enter your player name">
+<input id="roomCode" maxlength="8" placeholder="Room code (blank = create)">
+<select id="pairCount">
+<option value="15">15 pairs (30 cards)</option>
+<option value="30">30 pairs (60 cards)</option>
+<option value="50">50 pairs (100 cards)</option>
+</select>
+<button class="primary" id="joinBtn">CREATE / JOIN ROOM</button>
+<p class="hint">Player 1 creates the room. Player 2 enters the same code.</p>
+<p class="hint" id="lobbyMessage"></p>
+</section>
+
+<section class="game hidden" id="game">
+<div class="info">
+<div class="roomline">
+<span>ROOM: <b id="roomLabel"></b></span>
+<span>YOU: <b id="roleLabel"></b></span>
+<button id="copyRoom">COPY CODE</button>
+</div>
+<div class="stats">
+<div class="stat"><small>TIME LEFT</small><strong id="timer">10s</strong></div>
+<div class="stat"><small>PAIRS</small><strong id="found">0/15</strong></div>
+<div class="stat"><small>CARDS</small><strong id="cardCount">30</strong></div>
+</div>
+<div class="players">
+<div class="player active" id="p1"><span id="name1">Player 1</span><strong id="score1">0</strong></div>
+<div class="player" id="p2"><span id="name2">Waiting...</span><strong id="score2">0</strong></div>
+</div>
+<p id="message">Waiting for players...</p>
+</div>
+<div id="board"></div>
+<div class="footer">
+<button id="newGame">NEW GAME</button>
+<button id="leaveGame">LEAVE ROOM</button>
+</div>
+</section>
+</div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
+import {getDatabase,ref,get,runTransaction,onValue} from "https://www.gstatic.com/firebasejs/13.0.0/firebase-database.js";
+
+// YOUR FIREBASE CONFIGURATION
+const firebaseConfig={
+  apiKey:"AIzaSyDroAguNaqCl56fK0Wa2hudVRjAKqlLk2I",
+  authDomain:"match-the-16551.firebaseapp.com",
+  databaseURL:"https://match-the-16551-default-rtdb.firebaseio.com",
+  projectId:"match-the-16551",
+  storageBucket:"match-the-16551.firebasestorage.app",
+  messagingSenderId:"768943346775",
+  appId:"1:768943346775:web:91f6dfe982d242cc7cff12"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+const $=id=>document.getElementById(id);
+
+const symbols=[
+"🐶","🐱","🦊","🐻","🐼","🐸","🐵","🦁","🐯","🐮",
+"🐷","🐰","🐨","🐔","🐧","🐦","🦄","🐙","🦋","🐢",
+"🐬","🦈","🐳","🦖","🦕","🐝","🐞","🦉","🦜","🦚",
+"🍎","🍉","🍇","🍓","🍒","🍍","🥭","🍌","🍋","🥝",
+"🍕","🍔","🍟","🌮","🍩","🍪","🎂","🍿","🍦","🧁"
+];
+
+let roomId="",myRole=0,state=null,stopListening=null;
+let timer=null,timerKey="",busy=false,handled="";
+let rendered=[],resolving=false;
+
+function shuffle(a){
+ for(let i=a.length-1;i>0;i--){
+  const j=Math.floor(Math.random()*(i+1));
+  [a[i],a[j]]=[a[j],a[i]];
+ }
+ return a;
+}
+function makeCards(n){
+ const s=symbols.slice(0,n);
+ return shuffle([...s,...s]).map((symbol,id)=>({id,symbol,matched:false}));
+}
+function roomRef(){return ref(db,"rooms/"+roomId)}
+function code(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+
+$("joinBtn").onclick=joinRoom;
+
+async function joinRoom(){
+ const name=$("playerName").value.trim();
+ if(!name){$("lobbyMessage").textContent="Enter your name first.";return}
+ $("joinBtn").disabled=true;
+ $("lobbyMessage").textContent="Connecting...";
+ try{
+  const requested=$("roomCode").value.trim().toUpperCase();
+  roomId=requested||code();
+  const r=roomRef();
+
+  if(!requested){
+   const n=Number($("pairCount").value);
+   const result=await runTransaction(r,current=>{
+    if(current!==null)return;
+    return {
+     status:"waiting",pairCount:n,cards:makeCards(n),
+     players:{1:{name,score:0},2:null},
+     turn:1,selected:[],matchedPairs:0,round:0,deadline:0
+    };
+   });
+   if(!result.committed)throw Error("Code collision. Try again.");
+   myRole=1;
+  }else{
+   const snap=await get(r);
+   if(!snap.exists())throw Error("Room not found. Check the code.");
+   const result=await runTransaction(r,current=>{
+    if(!current||current.status!=="waiting"||current.players?.[2])return;
+    current.players[2]={name,score:0};
+    current.status="playing";
+    current.deadline=Date.now()+10000;
+    current.round++;
+    return current;
+   });
+   if(!result.committed)throw Error("Room full or already started.");
+   myRole=2;
+  }
+
+  $("lobby").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  $("roomLabel").textContent=roomId;
+  $("roleLabel").textContent="Player "+myRole;
+  if(stopListening)stopListening();
+  stopListening=onValue(r,snap=>{
+   if(!snap.exists())return;
+   state=snap.val();
+   draw();
+  });
+ }catch(e){
+  $("lobbyMessage").textContent=e.message+" Check Firebase Database Rules.";
+  roomId="";
+ }finally{$("joinBtn").disabled=false}
+}
+
+function draw(){
+ if(!state)return;
+ const g=state;
+ $("name1").textContent=g.players?.[1]?.name||"Player 1";
+ $("name2").textContent=g.players?.[2]?.name||"Waiting...";
+ $("score1").textContent=g.players?.[1]?.score||0;
+ $("score2").textContent=g.players?.[2]?.score||0;
+ $("found").textContent=g.matchedPairs+"/"+g.pairCount;
+ $("cardCount").textContent=g.pairCount*2;
+ $("p1").classList.toggle("active",g.status==="playing"&&g.turn===1);
+ $("p2").classList.toggle("active",g.status==="playing"&&g.turn===2);
+
+ if(g.status==="waiting")$("message").textContent="Waiting for Player 2...";
+ else if(g.status==="finished"){
+  const a=g.players[1].score,b=g.players[2].score;
+  $("message").textContent=a===b?"🤝 TIE GAME!":a>b?"🏆 PLAYER 1 WINS!":"🏆 PLAYER 2 WINS!";
+ }else $("message").textContent=g.turn===myRole?"YOUR TURN! Choose two cards.":"WAIT! Player "+g.turn+" is playing.";
+
+ $("board").style.setProperty("--rows",Math.ceil(g.cards.length/5));
+ if(rendered.length!==g.cards.length){
+  $("board").innerHTML="";
+  rendered=g.cards.map(c=>{
+   const b=document.createElement("button");
+   b.className="card";b.textContent="?";
+   b.onclick=()=>pick(c.id);
+   $("board").appendChild(b);
+   return b;
+  });
+ }
+
+ const chosen=g.selected||[];
+ g.cards.forEach((c,i)=>{
+  const b=rendered[i],visible=c.matched||chosen.includes(c.id);
+  b.textContent=visible?c.symbol:"?";
+  b.classList.toggle("revealed",visible);
+  b.classList.toggle("matched",c.matched);
+  b.disabled=g.status!=="playing"||g.turn!==myRole||
+    busy||visible||chosen.length>=2||Date.now()>=g.deadline;
+ });
+
+ if(g.status==="playing")updateTimer(g);
+ else{clearInterval(timer);$("timer").textContent="DONE"}
+
+ if(g.status==="playing"&&chosen.length===2)resolve(g);
+}
+
+function updateTimer(g){
+ const key=g.turn+":"+g.deadline;
+ if(timerKey===key)return;
+ timerKey=key;
+ clearInterval(timer);
+ function tick(){
+  if(!state||state.status!=="playing")return;
+  const left=Math.max(0,Math.ceil((g.deadline-Date.now())/1000));
+  $("timer").textContent=left+"s";
+  $("timer").classList.toggle("danger",left<=3);
+  if(left===0)expire(g.turn,g.deadline);
+ }
+ tick();timer=setInterval(tick,200);
+}
+
+async function pick(id){
+ if(!state||state.status!=="playing"||state.turn!==myRole||
+    busy||Date.now()>=state.deadline)return;
+ const c=state.cards.find(x=>x.id===id);
+ if(!c||c.matched||state.selected.includes(id)||state.selected.length>=2)return;
+
+ const result=await runTransaction(roomRef(),current=>{
+  if(!current||current.status!=="playing"||current.turn!==myRole||
+     Date.now()>=current.deadline||current.selected.length>=2)return;
+  const card=current.cards.find(x=>x.id===id);
+  if(!card||card.matched||current.selected.includes(id))return;
+  current.selected.push(id);
+  return current;
+ });
+ if(!result.committed)return;
+}
+
+async function resolve(g){
+ if(resolving||!g||g.selected?.length!==2)return;
+ resolving=true;busy=true;
+ const key=g.round+":"+g.turn+":"+g.selected.join(",");
+ if(handled===key){resolving=false;busy=false;return}
+ handled=key;
+ // Briefly show both cards on both devices.
+ await new Promise(r=>setTimeout(r,700));
+ try{
+  await runTransaction(roomRef(),current=>{
+   if(!current||current.status!=="playing"||current.selected.length!==2||
+      current.round!==g.round||current.turn!==g.turn||
+      current.selected[0]!==g.selected[0]||current.selected[1]!==g.selected[1])return;
+   const [a,b]=current.selected.map(id=>current.cards.find(c=>c.id===id));
+   if(!a||!b)return;
+   if(a.symbol===b.symbol){
+    a.matched=true;b.matched=true;
+    current.players[current.turn].score++;
+    current.matchedPairs++;
+    current.selected=[];
+    current.round++;
+    current.deadline=Date.now()+10000;
+    if(current.matchedPairs>=current.pairCount)current.status="finished";
+   }else{
+    current.selected=[];
+    current.turn=current.turn===1?2:1;
+    current.round++;
+    current.deadline=Date.now()+10000;
+   }
+   return current;
+  });
+ }catch(e){console.error(e)}
+ finally{resolving=false;busy=false;if(state)draw()}
+}
+
+async function expire(turn,deadline){
+ if(!state||state.status!=="playing"||state.turn!==turn||
+    state.deadline!==deadline||Date.now()<deadline)return;
+ await runTransaction(roomRef(),current=>{
+  if(!current||current.status!=="playing"||current.turn!==turn||
+     current.deadline!==deadline||Date.now()<deadline)return;
+  current.selected=[];
+  current.turn=turn===1?2:1;
+  current.round++;
+  current.deadline=Date.now()+10000;
+  return current;
+ });
+}
+
+$("copyRoom").onclick=async()=>{
+ try{await navigator.clipboard.writeText(roomId);$("message").textContent="Room code copied!"}
+ catch{$("message").textContent="Room code: "+roomId}
+};
+
+$("newGame").onclick=async()=>{
+ if(myRole!==1){alert("Only Player 1 can start a new game.");return}
+ if(!confirm("Start a new game?"))return;
+ await runTransaction(roomRef(),current=>{
+  if(!current||!current.players?.[2])return;
+  current.status="playing";
+  current.cards=makeCards(current.pairCount);
+  current.players[1].score=0;
+  current.players[2].score=0;
+  current.turn=1;current.selected=[];
+  current.matchedPairs=0;current.round++;
+  current.deadline=Date.now()+10000;
+  return current;
+ });
+};
+
+$("leaveGame").onclick=()=>{
+ clearInterval(timer);
+ if(stopListening)stopListening();
+ location.reload();
+};
+</script>
+</body>
+</html>
